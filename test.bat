@@ -81,9 +81,9 @@ echo. > %OUTFILE%
 echo DS-FTP Performance Table (averaged over %RUNS% runs) >> %OUTFILE%
 echo Timeout: %TIMEOUT_MS%ms ^| Small: 3KB ^| Large: 500KB >> %OUTFILE%
 echo. >> %OUTFILE%
-echo -------------------------------------------------------------------------- >> %OUTFILE%
-echo  Mode     ^| File   ^|  RN  ^|  Run 1   ^|  Run 2   ^|  Run 3   ^|  Average  >> %OUTFILE%
-echo -------------------------------------------------------------------------- >> %OUTFILE%
+echo ------------------------------------------------------------------------------ >> %OUTFILE%
+echo  Mode     ^| File   ^|   RN ^|     Run 1  ^|     Run 2  ^|     Run 3  ^|    Average >> %OUTFILE%
+echo ------------------------------------------------------------------------------ >> %OUTFILE%
 
 echo.
 echo ====================================================================
@@ -91,8 +91,8 @@ echo  DS-FTP Performance Table (averaged over %RUNS% runs)
 echo  Timeout: %TIMEOUT_MS%ms ^| Small: 3KB ^| Large: 500KB
 echo ====================================================================
 echo.
-echo  Mode     ^| File   ^|  RN  ^|  Run 1   ^|  Run 2   ^|  Run 3   ^|  Average
-echo --------------------------------------------------------------------------
+echo  Mode     ^| File   ^|   RN ^|     Run 1  ^|     Run 2  ^|     Run 3  ^|    Average
+echo ------------------------------------------------------------------------------
 
 for %%M in (S^&W GBN-20 GBN-40 GBN-80) do (
     for %%F in (small large) do (
@@ -102,8 +102,8 @@ for %%M in (S^&W GBN-20 GBN-40 GBN-80) do (
     )
 )
 
-echo --------------------------------------------------------------------------
-echo -------------------------------------------------------------------------- >> %OUTFILE%
+echo ------------------------------------------------------------------------------
+echo ------------------------------------------------------------------------------ >> %OUTFILE%
 echo.
 echo results saved to %OUTFILE%
 echo raw data saved to %CSV%
@@ -176,25 +176,16 @@ goto :eof
 
 :: -------------------------------------------------------
 :: :printrow - prints one row of the averaged table
+:: uses powershell for fixed-width formatting so columns
+:: stay aligned even with triple-digit times
 :: -------------------------------------------------------
 :printrow
 set "PR_MODE=%~1"
 set "PR_FILE=%~2"
 set "PR_RN=%~3"
 
-for /f "usebackq delims=" %%A in (`powershell -Command "$lines = Get-Content '%CSV%' | Where-Object { $_ -match '^%PR_MODE%,%PR_FILE%,%PR_RN%,' }; $times = $lines | ForEach-Object { ($_ -split ',')[4] }; $t1 = $times[0]; $t2 = $times[1]; $t3 = $times[2]; if ($t1 -eq 'FAIL' -or $t2 -eq 'FAIL' -or $t3 -eq 'FAIL') { Write-Output ('FAIL|FAIL|FAIL|FAIL') } else { $avg = [math]::Round(([double]$t1 + [double]$t2 + [double]$t3) / 3, 2); Write-Output ('{0}|{1}|{2}|{3}' -f $t1,$t2,$t3,$avg) }"`) do set "VALS=%%A"
+for /f "usebackq delims=" %%A in (`powershell -Command "$lines = Get-Content '%CSV%' | Where-Object { $_ -match '^%PR_MODE%,%PR_FILE%,%PR_RN%,' }; $times = $lines | ForEach-Object { ($_ -split ',')[4] }; $t1 = $times[0]; $t2 = $times[1]; $t3 = $times[2]; if ($t1 -eq 'FAIL' -or $t2 -eq 'FAIL' -or $t3 -eq 'FAIL') { $row = ' {0,-8} | {1,-6} | {2,4} | {3,10} | {4,10} | {5,10} | {6,10}' -f '%PR_MODE%','%PR_FILE%','%PR_RN%','FAIL','FAIL','FAIL','FAIL'; Write-Output $row } else { $avg = [math]::Round(([double]$t1 + [double]$t2 + [double]$t3) / 3, 2); $row = ' {0,-8} | {1,-6} | {2,4} | {3,10} | {4,10} | {5,10} | {6,10}' -f '%PR_MODE%','%PR_FILE%','%PR_RN%',($t1+'s'),($t2+'s'),($t3+'s'),($avg.ToString()+'s'); Write-Output $row }"`) do set "ROW=%%A"
 
-for /f "tokens=1-4 delims=|" %%A in ("!VALS!") do (
-    set "T1=%%A"
-    set "T2=%%B"
-    set "T3=%%C"
-    set "AVG=%%D"
-)
-
-set "PR_MODE=!PR_MODE!        "
-set "PR_FILE=!PR_FILE!      "
-set "PR_RN=  !PR_RN!"
-
-echo  !PR_MODE:~0,8! ^| !PR_FILE:~0,6! ^| !PR_RN:~-4! ^| !T1!s	 ^| !T2!s	 ^| !T3!s	 ^| !AVG!s
-echo  !PR_MODE:~0,8! ^| !PR_FILE:~0,6! ^| !PR_RN:~-4! ^| !T1!s	 ^| !T2!s	 ^| !T3!s	 ^| !AVG!s >> %OUTFILE%
+echo !ROW!
+echo !ROW! >> %OUTFILE%
 goto :eof
