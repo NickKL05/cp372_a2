@@ -17,9 +17,6 @@ setlocal enabledelayedexpansion
 ::
 :: run from the parent directory containing Sender\ and Receiver\
 ::   benchmark.bat
-::
-:: output: prints the full performance table to console and
-::         saves it to benchmark_results.txt
 :: ============================================================
 
 set TIMEOUT_MS=200
@@ -30,12 +27,15 @@ set RUNS=3
 set CSV=benchmark_raw.csv
 echo mode,file,rn,run,time > %CSV%
 
+:: kill any leftover java processes from previous runs
+taskkill /f /im java.exe >nul 2>&1
+
 :: -------------------------------------------------------
 :: create test files
 :: -------------------------------------------------------
 echo creating test files...
 
-:: small: 3KB (< 4KB as required by spec)
+:: small: 3KB (less than 4KB as required by spec)
 powershell -Command "$bytes = New-Object byte[] 3072; (New-Object Random).NextBytes($bytes); [IO.File]::WriteAllBytes('tmp_bench_small.bin', $bytes)"
 
 :: large: 500KB (in the 0.2-2MB range as required by spec)
@@ -49,16 +49,12 @@ echo.
 :: run all 72 tests
 :: -------------------------------------------------------
 
-:: track total for progress indicator
 set TOTAL=72
 set CURRENT=0
 
-echo running %TOTAL% tests (this will take a few minutes)...
-echo s&w with rn=5 on large files is the slowest (~80+ seconds each)
+echo running %TOTAL% tests...
+echo s^&w large rn=5 is the slowest (~3-4 min per run, ~10 min total)
 echo.
-
-:: modes: label, window (empty string = s&w)
-:: we loop through them manually since batch doesn't do arrays of tuples well
 
 for %%R in (0 5 100) do (
     for %%F in (small large) do (
@@ -122,7 +118,6 @@ goto :eof
 
 :: -------------------------------------------------------
 :: :run3 - runs a single configuration 3 times
-:: args: mode file rn window filepath
 :: -------------------------------------------------------
 :run3
 set "R3_MODE=%~1"
@@ -133,12 +128,18 @@ set "R3_PATH=%~5"
 
 for /l %%I in (1,1,%RUNS%) do (
     set /a CURRENT+=1
-    set /a PORT+=2
+
+    :: use big port gap to avoid os port reuse conflicts
+    set /a PORT+=10
     set /a ACKP=PORT+1
+
+    :: kill any zombie java processes before each run
+    taskkill /f /im java.exe >nul 2>&1
+    timeout /t 1 /nobreak >nul
 
     :: start receiver
     start /b java -cp Receiver Receiver 127.0.0.1 !ACKP! !PORT! tmp_bench_out_%%I.bin !R3_RN! >nul 2>&1
-    timeout /t 1 /nobreak >nul
+    timeout /t 2 /nobreak >nul
 
     :: run sender
     if "!R3_WIN!"=="" (
@@ -147,7 +148,8 @@ for /l %%I in (1,1,%RUNS%) do (
         java -cp Sender Sender 127.0.0.1 !PORT! !ACKP! !R3_PATH! %TIMEOUT_MS% !R3_WIN! > tmp_sender_bench.txt 2>&1
     )
 
-    timeout /t 1 /nobreak >nul
+    :: wait for receiver to finish writing
+    timeout /t 2 /nobreak >nul
 
     :: extract time
     set "BTIME=FAIL"
@@ -174,14 +176,12 @@ goto :eof
 
 :: -------------------------------------------------------
 :: :printrow - prints one row of the averaged table
-:: args: mode file rn
 :: -------------------------------------------------------
 :printrow
 set "PR_MODE=%~1"
 set "PR_FILE=%~2"
 set "PR_RN=%~3"
 
-:: pull the 3 times from the csv using powershell for reliable float math
 for /f "usebackq delims=" %%A in (`powershell -Command "$lines = Get-Content '%CSV%' | Where-Object { $_ -match '^%PR_MODE%,%PR_FILE%,%PR_RN%,' }; $times = $lines | ForEach-Object { ($_ -split ',')[4] }; $t1 = $times[0]; $t2 = $times[1]; $t3 = $times[2]; if ($t1 -eq 'FAIL' -or $t2 -eq 'FAIL' -or $t3 -eq 'FAIL') { Write-Output ('FAIL|FAIL|FAIL|FAIL') } else { $avg = [math]::Round(([double]$t1 + [double]$t2 + [double]$t3) / 3, 2); Write-Output ('{0}|{1}|{2}|{3}' -f $t1,$t2,$t3,$avg) }"`) do set "VALS=%%A"
 
 for /f "tokens=1-4 delims=|" %%A in ("!VALS!") do (
