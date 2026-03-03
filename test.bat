@@ -22,7 +22,7 @@ setlocal enabledelayedexpansion
 ::         saves it to benchmark_results.txt
 :: ============================================================
 
-set TIMEOUT_MS=1000
+set TIMEOUT_MS=200
 set PORT=50000
 set RUNS=3
 
